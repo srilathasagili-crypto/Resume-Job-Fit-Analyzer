@@ -57,40 +57,44 @@ def extract_skills(text: str) -> list:
     """Scan text for any skill in the fixed SKILLS vocabulary."""
     text = str(text).lower()
     return [skill for skill in SKILLS if skill in text]
- 
+
 def _read_job_file(path: str) -> pd.DataFrame:
-    """
-    Read a job-postings file, tolerating a few common export quirks:
-      - real .csv files
-      - real Excel .xls / .xlsx files
-      - files with a ".xls" extension that actually contain plain CSV text
-        (a common artifact of some scraping/export tools)
-      - CSVs delimited with ";" instead of ","
-    """
-    lower = path.lower()
+    
+    with open(path, "rb") as f:
+        header = f.read(8)
  
-    if lower.endswith((".xlsx", ".xls")):
-        
+    is_xlsx = header.startswith(b"PK\x03\x04")          
+    is_xls = header.startswith(b"\xd0\xcf\x11\xe0")      
+ 
+    if is_xlsx or is_xls:
+       
+        engine = "openpyxl" if is_xlsx else "xlrd"
         try:
-            return pd.read_excel(path)
-        except Exception:
-            pass 
- 
+            return pd.read_excel(path, engine=engine)
+        except ImportError as e:
+            raise ImportError(
+                f"This is a real Excel file, but the '{engine}' package isn't "
+                f"installed. Run: pip install {engine}"
+            ) from e
     try:
         df = pd.read_csv(path)
         if df.shape[1] > 1:
             return df
     except Exception:
         pass
- 
     try:
         df = pd.read_csv(path, sep=";")
         if df.shape[1] > 1:
             return df
     except Exception:
         pass
- 
-    return pd.read_csv(path, sep=None, engine="python")
+    try:
+        return pd.read_csv(path, sep=None, engine="python")
+    except Exception as e:
+        raise ValueError(
+            "Could not parse this file as CSV or Excel. Please check that it's "
+            "a valid job-postings export."
+        ) from e
  
  
 @st.cache_data
@@ -104,15 +108,15 @@ def load_and_prepare_data(csv_path: str):
         )
  
     df = df.drop(columns=[c for c in ["Uniq Id", "Crawl Timestamp"] if c in df.columns])
- 
+
     for col in ["Job Title", "Key Skills", "Role", "Industry"]:
         if col in df.columns:
             df[col] = df[col].fillna("")
  
     df["Cleaned_Key_Skills"] = df["Key Skills"].apply(preprocess_text)
- 
+
     df["Extracted Skills"] = df["Key Skills"].apply(extract_skills)
- 
+
     df["Job_Text"] = (
         df.get("Job Title", "") + " "
         + df.get("Key Skills", "") + " "
@@ -234,7 +238,6 @@ def main():
  
 if __name__ == "__main__":
     main()
-   
 
 
    

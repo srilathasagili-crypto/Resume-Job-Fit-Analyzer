@@ -57,17 +57,17 @@ def extract_skills(text: str) -> list:
     """Scan text for any skill in the fixed SKILLS vocabulary."""
     text = str(text).lower()
     return [skill for skill in SKILLS if skill in text]
-
+ 
 def _read_job_file(path: str) -> pd.DataFrame:
     
     with open(path, "rb") as f:
         header = f.read(8)
  
     is_xlsx = header.startswith(b"PK\x03\x04")          
-    is_xls = header.startswith(b"\xd0\xcf\x11\xe0")      
+    is_xls = header.startswith(b"\xd0\xcf\x11\xe0")     
  
     if is_xlsx or is_xls:
-       
+        
         engine = "openpyxl" if is_xlsx else "xlrd"
         try:
             return pd.read_excel(path, engine=engine)
@@ -76,25 +76,35 @@ def _read_job_file(path: str) -> pd.DataFrame:
                 f"This is a real Excel file, but the '{engine}' package isn't "
                 f"installed. Run: pip install {engine}"
             ) from e
+ 
+    attempts = []
+    for sep in [",", ";", "\t"]:
+        for encoding in ["utf-8", "utf-8-sig", "utf-16", "latin-1", "cp1252"]:
+            try:
+                df = pd.read_csv(path, sep=sep, encoding=encoding)
+                if df.shape[1] > 1:
+                    return df
+                attempts.append(f"sep={sep!r} encoding={encoding!r}: parsed but only 1 column")
+            except Exception as e:
+                attempts.append(f"sep={sep!r} encoding={encoding!r}: {type(e).__name__}: {e}")
+ 
     try:
-        df = pd.read_csv(path)
+        df = pd.read_csv(path, sep=None, engine="python")
         if df.shape[1] > 1:
             return df
-    except Exception:
-        pass
-    try:
-        df = pd.read_csv(path, sep=";")
-        if df.shape[1] > 1:
-            return df
-    except Exception:
-        pass
-    try:
-        return pd.read_csv(path, sep=None, engine="python")
+        attempts.append("sep=None (sniffed): parsed but only 1 column")
     except Exception as e:
-        raise ValueError(
-            "Could not parse this file as CSV or Excel. Please check that it's "
-            "a valid job-postings export."
-        ) from e
+        attempts.append(f"sep=None (sniffed): {type(e).__name__}: {e}")
+
+    with open(path, "rb") as f:
+        raw_preview = f.read(300)
+ 
+    details = "\n".join(f"  - {a}" for a in attempts)
+    raise ValueError(
+        "Could not parse this file as CSV or Excel after trying multiple "
+        f"delimiters/encodings.\n\nRaw first bytes: {raw_preview!r}\n\n"
+        f"Attempts:\n{details}"
+    )
  
  
 @st.cache_data
@@ -112,11 +122,11 @@ def load_and_prepare_data(csv_path: str):
     for col in ["Job Title", "Key Skills", "Role", "Industry"]:
         if col in df.columns:
             df[col] = df[col].fillna("")
- 
+
     df["Cleaned_Key_Skills"] = df["Key Skills"].apply(preprocess_text)
-
+ 
     df["Extracted Skills"] = df["Key Skills"].apply(extract_skills)
-
+ 
     df["Job_Text"] = (
         df.get("Job Title", "") + " "
         + df.get("Key Skills", "") + " "
@@ -165,7 +175,8 @@ def main():
         )
         st.stop()
     except Exception as e:
-        st.error(f"Error loading data: {e}")
+        st.error("Error loading data. See details below.")
+        st.code(str(e))
         st.stop()
  
     st.success(f"Loaded {len(df):,} job postings from `{csv_path}`.")

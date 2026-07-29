@@ -14,10 +14,6 @@ from nltk.stem import WordNetLemmatizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-
-# ----------------------------------------------------------------------------
-# Setup: NLTK resources (cached so this only runs once per session)
-# ----------------------------------------------------------------------------
 @st.cache_resource
 def load_nltk_resources():
     for resource in ["stopwords", "punkt", "wordnet", "punkt_tab"]:
@@ -30,7 +26,6 @@ def load_nltk_resources():
 
 STOP_WORDS, LEMMATIZER = load_nltk_resources()
 
-# Fixed skill vocabulary used for skill extraction / gap analysis
 SKILLS = [
     "python", "sql", "excel", "power bi", "tableau",
     "machine learning", "deep learning", "tensorflow",
@@ -41,10 +36,6 @@ SKILLS = [
     "mongodb", "mysql", "postgresql", "linux",
 ]
 
-
-# ----------------------------------------------------------------------------
-# Core NLP functions (ported directly from the notebook)
-# ----------------------------------------------------------------------------
 def preprocess_text(text: str) -> str:
     """Lowercase, strip numbers/punctuation, remove stopwords, lemmatize."""
     text = str(text)
@@ -67,29 +58,20 @@ def extract_skills(text: str) -> list:
     text = str(text).lower()
     return [skill for skill in SKILLS if skill in text]
 
-
-# ----------------------------------------------------------------------------
-# Data loading + preparation (cached so it only runs once per dataset)
-# ----------------------------------------------------------------------------
 @st.cache_data
 def load_and_prepare_data(csv_path: str):
     df = pd.read_csv(csv_path)
 
-    # Drop columns not needed for matching, if present
     df = df.drop(columns=[c for c in ["Uniq Id", "Crawl Timestamp"] if c in df.columns])
 
-    # Fill NaNs in text columns used downstream
     for col in ["Job Title", "Key Skills", "Role", "Industry"]:
         if col in df.columns:
             df[col] = df[col].fillna("")
 
-    # Cleaned skills text (word-frequency / word cloud / bigram analysis)
     df["Cleaned_Key_Skills"] = df["Key Skills"].apply(preprocess_text)
 
-    # Skill extraction per posting
     df["Extracted Skills"] = df["Key Skills"].apply(extract_skills)
 
-    # Combined text field used for TF-IDF matching
     df["Job_Text"] = (
         df.get("Job Title", "") + " "
         + df.get("Key Skills", "") + " "
@@ -114,10 +96,6 @@ def match_resume(resume_text: str, df: pd.DataFrame, tfidf: TfidfVectorizer,
     results["Match Score (%)"] = (similarity_scores[top_indices] * 100).round(2)
     return results, similarity_scores, top_indices
 
-
-# ----------------------------------------------------------------------------
-# Streamlit UI
-# ----------------------------------------------------------------------------
 def main():
     st.set_page_config(page_title="Resume ↔ Job Matcher", layout="wide")
     st.title("📄 Resume ↔ Job Matcher")
@@ -166,7 +144,6 @@ def main():
         ] if c in results.columns]
         st.dataframe(results[display_cols], use_container_width=True)
 
-        # Best match details + skill gap analysis
         best_idx = top_indices[0]
         best_job = df.iloc[best_idx]
         best_score = similarity_scores[best_idx] * 100

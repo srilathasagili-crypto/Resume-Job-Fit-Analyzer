@@ -1,27 +1,3 @@
-"""
-Resume ↔ Job Matcher
----------------------
-Streamlit app version of the NLP_Project.ipynb notebook.
-
-It:
-  1. Loads and cleans a job postings dataset (job.csv)
-  2. Preprocesses the "Key Skills" text (lowercase, remove punctuation/numbers,
-     remove stopwords, lemmatize)
-  3. Builds a TF-IDF representation of each job posting (title + skills + role + industry)
-  4. Lets the user paste in resume text
-  5. Finds the best-matching job(s) via cosine similarity
-  6. Extracts a fixed skill vocabulary from both the resume and the matched job,
-     and reports matched / missing skills
-
-Run with:
-    pip install streamlit pandas numpy scikit-learn nltk wordcloud matplotlib
-    streamlit run app.py
-
-Place your job.csv (must contain at least the columns:
-"Job Title", "Key Skills", "Role", "Industry", "Location",
-"Job Experience Required") in the same folder as this script.
-"""
-
 import re
 import string
 from collections import Counter
